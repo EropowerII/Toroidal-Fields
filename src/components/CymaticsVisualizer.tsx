@@ -317,24 +317,22 @@ export default function CymaticsVisualizer({
 
       // 4. Draw Torus Shape Wireframe
       if (isSpecial) {
-        // Special Mode: Double spiral vortex to the poles (radius R = 0, collapsing)
-        const spiralArms = 6;
-        ctx.strokeStyle = 'rgba(167, 139, 250, 0.42)'; // Violet color
-        ctx.lineWidth = 1.5;
-
-        for (let s = 0; s < spiralArms; s++) {
-          const phiOffset = (s * Math.PI * 2) / spiralArms;
-
-          // North pole spiral
+        // Special Mode: Symmetric double vortex inside, returning via outer toroidal field
+        const armsCount = 8;
+        for (let s = 0; s < armsCount; s++) {
+          const phiOffset = (s * Math.PI * 2) / armsCount;
+          const strokeColor = (s % 2 === 0) ? 'rgba(167, 139, 250, 0.45)' : 'rgba(245, 158, 11, 0.45)';
+          
           ctx.beginPath();
           let first = true;
-          for (let t = 0; t <= 1.02; t += 0.02) {
-            const pz = sphereRadius * t;
-            const r_env = sphereRadius * 0.45 * Math.sin(t * Math.PI);
-            const phi = phiOffset + t * Math.PI * 4.0;
+
+          // 1. Inner North: Center -> North Pole (replicates south vortex structure in north)
+          for (let k = 0; k <= 1.01; k += 0.04) {
+            const pz = sphereRadius * k;
+            const r_env = sphereRadius * 0.45 * Math.sin(k * Math.PI);
+            const phi = phiOffset + k * Math.PI * 4.0;
             const px = r_env * Math.cos(phi);
             const py = r_env * Math.sin(phi);
-
             const pt = project3D(px, py, pz, width, height, pitch, localYaw);
             if (first) {
               ctx.moveTo(pt.x, pt.y);
@@ -343,28 +341,112 @@ export default function CymaticsVisualizer({
               ctx.lineTo(pt.x, pt.y);
             }
           }
-          ctx.stroke();
 
-          // South pole spiral
-          ctx.beginPath();
-          first = true;
-          for (let t = 0; t <= 1.02; t += 0.02) {
-            const pz = -sphereRadius * t;
-            const r_env = sphereRadius * 0.45 * Math.sin(t * Math.PI);
-            const phi = phiOffset - t * Math.PI * 4.0;
+          // 2. Outer Return: North Pole -> South Pole via outside (continuing effect around the outside)
+          for (let k = 0; k <= 1.01; k += 0.04) {
+            const pz = sphereRadius * Math.cos(k * Math.PI);
+            const r_env = sphereRadius * 1.0 * Math.sin(k * Math.PI);
+            const phi = phiOffset + Math.PI * 4.0 + k * Math.PI * 2.0;
             const px = r_env * Math.cos(phi);
             const py = r_env * Math.sin(phi);
-
             const pt = project3D(px, py, pz, width, height, pitch, localYaw);
-            if (first) {
-              ctx.moveTo(pt.x, pt.y);
-              first = false;
-            } else {
-              ctx.lineTo(pt.x, pt.y);
-            }
+            ctx.lineTo(pt.x, pt.y);
           }
+
+          // 3. Inner South: South Pole -> Center
+          for (let k = 1; k >= -0.01; k -= 0.04) {
+            const pz = -sphereRadius * k;
+            const r_env = sphereRadius * 0.45 * Math.sin(k * Math.PI);
+            const phi = phiOffset - k * Math.PI * 4.0;
+            const px = r_env * Math.cos(phi);
+            const py = r_env * Math.sin(phi);
+            const pt = project3D(px, py, pz, width, height, pitch, localYaw);
+            ctx.lineTo(pt.x, pt.y);
+          }
+
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = 1.6;
           ctx.stroke();
         }
+
+      } else if (isLight) {
+        // LIGHT MODE: paths follow the external sphere surface
+        // and fade to transparent/white at the center (Black Hole effect)
+        
+        // Poloidal lines on sphere
+        for (let w = 0; w < 16; w++) {
+          const phi = (w * Math.PI * 2) / 16;
+          let lastPt: { x: number; y: number } | null = null;
+          
+          for (let theta = -Math.PI; theta <= Math.PI + 0.05; theta += 0.05) {
+            const tx = sphereRadius * Math.cos(theta) * Math.cos(phi);
+            const ty = sphereRadius * Math.cos(theta) * Math.sin(phi);
+            const tz = sphereRadius * Math.sin(theta);
+
+            const pt = project3D(tx, ty, tz, width, height, pitch, localYaw);
+            
+            // Distance of projected point to center of screen
+            const dx = pt.x - width / 2;
+            const dy = pt.y - height / 2;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            const maxRadiusOnScreen = sphereRadius * pt.scale;
+            const ratio = Math.min(1.0, dist / Math.max(1, maxRadiusOnScreen));
+            
+            // Fading to white & transparent at center
+            const alpha = Math.pow(ratio, 2.8) * 0.72;
+            const r = Math.round(255 + (245 - 255) * ratio);
+            const g = Math.round(255 + (158 - 255) * ratio);
+            const b = Math.round(255 + (11 - 255) * ratio);
+
+            if (lastPt) {
+              ctx.beginPath();
+              ctx.moveTo(lastPt.x, lastPt.y);
+              ctx.lineTo(pt.x, pt.y);
+              ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+              ctx.lineWidth = 0.5 + ratio * 2.0;
+              ctx.stroke();
+            }
+            lastPt = pt;
+          }
+        }
+
+        // Toroidal (latitude) lines on sphere
+        for (let t = 1; t < 15; t++) {
+          const theta = -Math.PI / 2 + (t * Math.PI) / 16;
+          let lastPt: { x: number; y: number } | null = null;
+          
+          for (let phi = 0; phi <= Math.PI * 2 + 0.05; phi += 0.05) {
+            const tx = sphereRadius * Math.cos(theta) * Math.cos(phi);
+            const ty = sphereRadius * Math.cos(theta) * Math.sin(phi);
+            const tz = sphereRadius * Math.sin(theta);
+
+            const pt = project3D(tx, ty, tz, width, height, pitch, localYaw);
+            
+            const dx = pt.x - width / 2;
+            const dy = pt.y - height / 2;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            const maxRadiusOnScreen = sphereRadius * pt.scale;
+            const ratio = Math.min(1.0, dist / Math.max(1, maxRadiusOnScreen));
+            
+            const alpha = Math.pow(ratio, 2.8) * 0.45;
+            const r = Math.round(255 + (245 - 255) * ratio);
+            const g = Math.round(255 + (158 - 255) * ratio);
+            const b = Math.round(255 + (11 - 255) * ratio);
+
+            if (lastPt) {
+              ctx.beginPath();
+              ctx.moveTo(lastPt.x, lastPt.y);
+              ctx.lineTo(pt.x, pt.y);
+              ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+              ctx.lineWidth = 0.4 + ratio * 1.4;
+              ctx.stroke();
+            }
+            lastPt = pt;
+          }
+        }
+
       } else {
         // Poloidal lines
         for (let w = 0; w < 16; w++) {
@@ -479,17 +561,19 @@ export default function CymaticsVisualizer({
         }
       }
 
-      // Draw connections from central torus to all 8 outer nodes in Void Mode
+      // Draw connections from all 8 outer nodes to the center in Void Mode with respective color
       if (isVoid) {
         nodes.forEach((node) => {
+          const el = elements.find(e => e.id === node.id);
+          if (!el) return;
           const ptNode = project3D(sphereRadius * Math.cos(node.angle), sphereRadius * Math.sin(node.angle), 0, width, height, pitch, localYaw);
-          const ptCenterTorus = project3D(sphereRadius * 0.28 * Math.cos(node.angle), sphereRadius * 0.28 * Math.sin(node.angle), 0, width, height, pitch, localYaw);
+          const ptCenter = project3D(0, 0, 0, width, height, pitch, localYaw);
           
           ctx.beginPath();
-          ctx.strokeStyle = 'rgba(168, 85, 247, 0.32)';
-          ctx.lineWidth = 1.0;
-          ctx.moveTo(ptCenterTorus.x, ptCenterTorus.y);
-          ctx.lineTo(ptNode.x, ptNode.y);
+          ctx.strokeStyle = el.color;
+          ctx.lineWidth = 2.0;
+          ctx.moveTo(ptNode.x, ptNode.y);
+          ctx.lineTo(ptCenter.x, ptCenter.y);
           ctx.stroke();
         });
       }
@@ -508,20 +592,26 @@ export default function CymaticsVisualizer({
 
         const pt = project3D(nx, ny, nz, width, height, pitch, localYaw);
         
-        // Data-driven active node detection
-        const isElementActive = el.amplitude > 0.1 && node.isActive;
+        // Data-driven active node detection based on current mode
+        let isElementActive = false;
+        if (isVoid) {
+          isElementActive = true;
+        } else if (isSpecial || isLight) {
+          isElementActive = false;
+        } else {
+          isElementActive = el.amplitude > 0.1 && node.isActive;
+        }
+
         const baseSize = isElementActive ? 10 : 6;
         const nodeRadius = baseSize * pt.scale;
 
         updatedScreenCoords.set(node.id, { x: pt.x, y: pt.y, radius: nodeRadius });
 
-        // Connection radial line from center to node (skip in void mode since drawn above, unless active)
-        if (!isVoid || isElementActive) {
+        // Connection radial line from center to node (skip in void/light/special unless standard active node)
+        if (!isVoid && !isLight && !isSpecial && isElementActive) {
           ctx.beginPath();
-          ctx.strokeStyle = isElementActive 
-            ? el.color 
-            : 'rgba(255, 255, 255, 0.06)';
-          ctx.lineWidth = isElementActive ? 1.5 : 0.8;
+          ctx.strokeStyle = el.color;
+          ctx.lineWidth = 1.5;
           const centerPt = project3D(0, 0, 0, width, height, pitch, localYaw);
           ctx.moveTo(centerPt.x, centerPt.y);
           ctx.lineTo(pt.x, pt.y);
@@ -582,29 +672,91 @@ export default function CymaticsVisualizer({
         let size = p.size;
 
         if (isSpecial) {
-          // Special Mode: spiral vortex from center to poles
-          const t = Math.abs(p.theta) / Math.PI; // 0 to 1
-          const isNorth = p.theta > 0;
-          pz = sphereRadius * t * (isNorth ? 1 : -1);
+          // Special Mode: Continuous toroidal loop (Inner North -> Outer Return -> Inner South)
+          const thetaVal = p.theta; // Ranges from -Math.PI to Math.PI
           
-          const r_env = sphereRadius * 0.45 * Math.sin(t * Math.PI);
-          const winding = t * Math.PI * 4.0 * (isNorth ? 1 : -1);
-          const phi = p.phi + winding;
-          px = r_env * Math.cos(phi);
-          py = r_env * Math.sin(phi);
+          if (thetaVal < -Math.PI / 3) {
+            // Segment 1: Inner North (Center -> North Pole)
+            const k = (thetaVal + Math.PI) / (Math.PI * 2 / 3);
+            
+            pz = sphereRadius * k;
+            const r_env = sphereRadius * 0.45 * Math.sin(k * Math.PI);
+            const winding = k * Math.PI * 4.0;
+            const phi = p.phi + winding;
+            px = r_env * Math.cos(phi);
+            py = r_env * Math.sin(phi);
 
-          // Violet to white-indigo spiral color
-          const blend = t;
-          r = Math.round(139 + (217 - 139) * blend);
-          g = Math.round(92 + (70 - 92) * blend);
-          b = Math.round(246 + (239 - 246) * blend);
+            // Alternating Violet and Golden particles
+            if (p.phi < Math.PI) {
+              r = 167; g = 139; b = 250; // Violet
+            } else {
+              r = 245; g = 158; b = 11; // Golden
+            }
+            alpha = (0.35 + 0.55 * k) * p.alpha;
+            size = p.size * (1.1 + 1.2 * k);
+
+          } else if (thetaVal < Math.PI / 3) {
+            // Segment 2: Outer Return (North Pole -> South Pole via outside)
+            const k = (thetaVal + Math.PI / 3) / (Math.PI * 2 / 3);
+            
+            pz = sphereRadius * Math.cos(k * Math.PI);
+            const r_env = sphereRadius * 1.0 * Math.sin(k * Math.PI);
+            const winding = Math.PI * 4.0 + k * Math.PI * 2.0;
+            const phi = p.phi + winding;
+            px = r_env * Math.cos(phi);
+            py = r_env * Math.sin(phi);
+
+            // Alternating Violet and Golden particles
+            if (p.phi < Math.PI) {
+              r = 167; g = 139; b = 250; // Violet
+            } else {
+              r = 245; g = 158; b = 11; // Golden
+            }
+            alpha = (0.2 + 0.6 * Math.sin(k * Math.PI)) * p.alpha;
+            size = p.size * (1.0 + 1.0 * Math.sin(k * Math.PI));
+
+          } else {
+            // Segment 3: Inner South (South Pole -> Center)
+            const k_raw = (thetaVal - Math.PI / 3) / (Math.PI * 2 / 3);
+            const k = 1.0 - k_raw; // goes from 1 down to 0
+            
+            pz = -sphereRadius * k;
+            const r_env = sphereRadius * 0.45 * Math.sin(k * Math.PI);
+            const winding = -k * Math.PI * 4.0;
+            const phi = p.phi + winding;
+            px = r_env * Math.cos(phi);
+            py = r_env * Math.sin(phi);
+
+            // Alternating Violet and Golden particles
+            if (p.phi < Math.PI) {
+              r = 167; g = 139; b = 250; // Violet
+            } else {
+              r = 245; g = 158; b = 11; // Golden
+            }
+            alpha = (0.35 + 0.55 * k) * p.alpha;
+            size = p.size * (1.1 + 1.2 * k);
+          }
+        } else if (isLight) {
+          // LIGHT MODE: particles follow the external sphere surface
+          px = sphereRadius * Math.cos(p.theta) * Math.cos(p.phi);
+          py = sphereRadius * Math.cos(p.theta) * Math.sin(p.phi);
+          pz = sphereRadius * Math.sin(p.theta);
+
+          const t_norm = 1.0 - Math.abs(p.theta) / Math.PI;
+          
+          // Bright gold light particles
+          r = Math.round(251 + (245 - 251) * t_norm);
+          g = Math.round(191 + (158 - 191) * t_norm);
+          b = Math.round(36 + (11 - 36) * t_norm);
+          alpha = (0.28 + 0.56 * t_norm);
+          size = p.size * (1.1 + 0.9 * t_norm);
         } else {
           // Toroidal coordinates - use active fields closest element
           const { id: closestId, cosVal: cosDiff } = getClosestActiveElement(p.phi);
           const currentHighlightRGB = ELEMENT_RGBS[closestId] || [255, 255, 255];
 
-          const s_phi = (isVoid || isLight) ? 1.0 : (1.0 + 0.5 * cosDiff);
-          const scaleFactor = (sphereRadius * torusScale) * (s_phi / (isVoid || isLight ? 1.0 : 1.5));
+          const s_phi = isVoid ? 1.0 : (1.0 + 0.5 * cosDiff);
+          const scaleFactor = (sphereRadius * torusScale) * (s_phi / (isVoid ? 1.0 : 1.5));
 
           const r_minor = scaleFactor * (1 + Math.cos(p.theta));
           px = r_minor * Math.cos(p.phi);
@@ -620,13 +772,6 @@ export default function CymaticsVisualizer({
             b = Math.round(234 + (247 - 234) * t_norm);
             alpha = (0.24 + 0.52 * t_norm);
             size = p.size * (0.8 + 0.5 * t_norm);
-          } else if (isLight) {
-            // Bright gold light particles
-            r = Math.round(251 + (245 - 251) * t_norm);
-            g = Math.round(191 + (158 - 191) * t_norm);
-            b = Math.round(36 + (11 - 36) * t_norm);
-            alpha = (0.28 + 0.56 * t_norm);
-            size = p.size * (1.1 + 0.9 * t_norm);
           } else if (activeField) {
             // Symmetrical multi-element active fields particles
             const blend = t_norm * cosDiff;
@@ -653,6 +798,22 @@ export default function CymaticsVisualizer({
         let finalSize = size * pt.scale;
         let finalAlpha = alpha * pt.scale;
 
+        if (isLight) {
+          // Black hole effect for particles
+          const dx = pt.x - width / 2;
+          const dy = pt.y - height / 2;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const maxRadiusOnScreen = sphereRadius * pt.scale;
+          const ratio = Math.min(1.0, dist / Math.max(1, maxRadiusOnScreen));
+          
+          finalAlpha *= Math.pow(ratio, 2.8); // 100% transparent in center
+          
+          // Interpolate color from white (center) to golden orange (outer edge)
+          r = Math.round(255 + (245 - 255) * ratio);
+          g = Math.round(255 + (158 - 255) * ratio);
+          b = Math.round(255 + (11 - 255) * ratio);
+        }
+
         if (p.age < 15) finalAlpha *= p.age / 15;
         else if (p.age > p.lifeSpan - 15) finalAlpha *= (p.lifeSpan - p.age) / 15;
 
@@ -663,28 +824,27 @@ export default function CymaticsVisualizer({
         ctx.fill();
       }
 
-      // Draw center core glow
-      const centerPt = project3D(0, 0, 0, width, height, pitch, localYaw);
-      const centerGlow = ctx.createRadialGradient(centerPt.x, centerPt.y, 2, centerPt.x, centerPt.y, isVoid ? 12 : (isLight ? 25 : 20));
-      
-      if (isVoid) {
-        centerGlow.addColorStop(0, '#c084fc');
-        centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
-      } else if (isLight) {
-        centerGlow.addColorStop(0, '#fbbf24');
-        centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
-      } else if (selectedElement) {
-        centerGlow.addColorStop(0, selectedElement.color);
-        centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
-      } else {
-        centerGlow.addColorStop(0, '#ffffff');
-        centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
+      // Draw center core glow (skip in Light mode to maintain "black hole" center)
+      if (!isLight) {
+        const centerPt = project3D(0, 0, 0, width, height, pitch, localYaw);
+        const centerGlow = ctx.createRadialGradient(centerPt.x, centerPt.y, 2, centerPt.x, centerPt.y, isVoid ? 12 : 20);
+        
+        if (isVoid) {
+          centerGlow.addColorStop(0, '#c084fc');
+          centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
+        } else if (selectedElement) {
+          centerGlow.addColorStop(0, selectedElement.color);
+          centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
+        } else {
+          centerGlow.addColorStop(0, '#ffffff');
+          centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
+        }
+        
+        ctx.fillStyle = centerGlow;
+        ctx.beginPath();
+        ctx.arc(centerPt.x, centerPt.y, isVoid ? 12 : 20, 0, Math.PI * 2);
+        ctx.fill();
       }
-      
-      ctx.fillStyle = centerGlow;
-      ctx.beginPath();
-      ctx.arc(centerPt.x, centerPt.y, isVoid ? 12 : (isLight ? 25 : 20), 0, Math.PI * 2);
-      ctx.fill();
 
       ctx.globalCompositeOperation = 'source-over';
       animationFrameRef.current = requestAnimationFrame(render);

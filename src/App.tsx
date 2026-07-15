@@ -511,7 +511,7 @@ export default function App() {
                   </div>
                 </button>
 
-                {/* Side Angle View */}
+                {/* Side Angle View (now named Top) */}
                 <button
                   onClick={() => setViewAngle('side')}
                   className={`relative flex items-center justify-center md:justify-start gap-2 px-2 md:px-3 py-1.5 md:py-2.5 rounded-xl border font-mono text-[10px] md:text-[11px] font-bold capitalize transition-all duration-300 w-full text-center md:text-left cursor-pointer ${
@@ -520,16 +520,16 @@ export default function App() {
                       : 'bg-slate-900/40 border-slate-900 text-slate-400 hover:text-slate-200 hover:border-slate-800 hover:bg-slate-900/80'
                   }`}
                 >
-                  <Layers size={13} className={viewAngle === 'side' ? 'text-white' : 'opacity-70 text-slate-400'} />
+                  <Eye size={13} className={viewAngle === 'side' ? 'text-white' : 'opacity-70 text-slate-400'} />
                   <div className="flex flex-col leading-tight items-center md:items-start">
-                    <span className="text-[10px] md:text-[11px] font-semibold tracking-wide">Side</span>
+                    <span className="text-[10px] md:text-[11px] font-semibold tracking-wide">Top</span>
                     <span className="hidden md:inline text-[8px] font-mono font-normal mt-0.5 opacity-80">
-                      Profile View
+                      Down View
                     </span>
                   </div>
                 </button>
 
-                {/* Top Angle View */}
+                {/* Top Angle View (now named Side) */}
                 <button
                   onClick={() => setViewAngle('top')}
                   className={`relative flex items-center justify-center md:justify-start gap-2 px-2 md:px-3 py-1.5 md:py-2.5 rounded-xl border font-mono text-[10px] md:text-[11px] font-bold capitalize transition-all duration-300 w-full text-center md:text-left cursor-pointer ${
@@ -538,11 +538,11 @@ export default function App() {
                       : 'bg-slate-900/40 border-slate-900 text-slate-400 hover:text-slate-200 hover:border-slate-800 hover:bg-slate-900/80'
                   }`}
                 >
-                  <Eye size={13} className={viewAngle === 'top' ? 'text-white' : 'opacity-70 text-slate-400'} />
+                  <Layers size={13} className={viewAngle === 'top' ? 'text-white' : 'opacity-70 text-slate-400'} />
                   <div className="flex flex-col leading-tight items-center md:items-start">
-                    <span className="text-[10px] md:text-[11px] font-semibold tracking-wide">Top</span>
+                    <span className="text-[10px] md:text-[11px] font-semibold tracking-wide">Side</span>
                     <span className="hidden md:inline text-[8px] font-mono font-normal mt-0.5 opacity-80">
-                      Down View
+                      Profile View
                     </span>
                   </div>
                 </button>
