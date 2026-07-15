@@ -19,6 +19,10 @@ interface CymaticsVisualizerProps {
   selectedElementId: ElementType;
   onSelectElement: (id: ElementType) => void;
   autoRotate: boolean;
+  viewAngle: 'perspective' | 'side' | 'top' | null;
+  onClearViewAnglePreset: () => void;
+  visualMode: 'light' | 'void' | 'special' | null;
+  activeField: 'four' | 'eight' | null;
 }
 
 export default function CymaticsVisualizer({
@@ -28,13 +32,23 @@ export default function CymaticsVisualizer({
   selectedElementId,
   onSelectElement,
   autoRotate,
+  viewAngle,
+  onClearViewAnglePreset,
+  visualMode,
+  activeField,
 }: CymaticsVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Camera angles (radians)
-  const pitchRef = useRef<number>(-0.4); // tilt
-  const yawRef = useRef<number>(0.6);    // spin
+  // Camera current angles (radians)
+  // Default: side-ish profile view slightly above the equatorial line (pitch: -0.15, yaw: Math.PI / 2)
+  const pitchRef = useRef<number>(-0.15); // tilt
+  const yawRef = useRef<number>(Math.PI / 2);    // spin
+
+  // Camera target angles for smooth transition
+  const targetPitchRef = useRef<number>(-0.15);
+  const targetYawRef = useRef<number>(Math.PI / 2);
+
   const [isDraggingCamera, setIsDraggingCamera] = useState<boolean>(false);
   const [draggedNodeId, setDraggedNodeId] = useState<ElementType | null>(null);
 
@@ -67,6 +81,20 @@ export default function CymaticsVisualizer({
     return () => resizeObserver.disconnect();
   }, []);
 
+  // Sync viewAngle state to target angles
+  useEffect(() => {
+    if (viewAngle === 'perspective') {
+      targetPitchRef.current = -0.15;
+      targetYawRef.current = Math.PI / 2;
+    } else if (viewAngle === 'side') {
+      targetPitchRef.current = 0.0;
+      targetYawRef.current = Math.PI / 2;
+    } else if (viewAngle === 'top') {
+      targetPitchRef.current = -Math.PI / 2;
+      targetYawRef.current = 0.0;
+    }
+  }, [viewAngle]);
+
   // Initialize Particles
   useEffect(() => {
     const particles: Particle[] = [];
@@ -80,8 +108,6 @@ export default function CymaticsVisualizer({
 
   // Generate a particle representing Horn Torus flow
   const generateRandomParticle = (): Particle => {
-    // theta goes from -PI to PI (poloidal flow loop)
-    // phi goes from 0 to 2PI (toroidal sector)
     const theta = Math.random() * Math.PI * 2 - Math.PI;
     const phi = Math.random() * Math.PI * 2;
     const lifeSpan = 100 + Math.random() * 100;
@@ -157,13 +183,9 @@ export default function CymaticsVisualizer({
 
     for (const el of elementsList) {
       if (el.amplitude > 0.01) {
-        // Simple cymatic wave modulation:
-        // We use harmonic ratio for toroidal lobes and frequency for polar ripples
         const wave = Math.cos(el.harmonicRatio * phi + el.phase) * Math.sin(el.frequency * 0.02 * theta);
         
         if (el.type === 'minor') {
-          // Minor elements are complex waves (multiplicative interaction between parents)
-          // Wave folder modulation style:
           const parentFreqDiff = Math.abs(el.baseFrequency - (el.frequency));
           const waveComplex = Math.sin(el.harmonicRatio * phi * 1.5) * Math.cos((el.frequency * 0.03) * theta + Math.sin(parentFreqDiff * 0.05 * theta));
           modulation += el.amplitude * waveComplex * (1 + el.modulationDepth * 0.8);
@@ -174,7 +196,6 @@ export default function CymaticsVisualizer({
       }
     }
 
-    // Stabilize bounds
     return Math.max(0.1, Math.min(2.5, modulation));
   };
 
@@ -189,18 +210,20 @@ export default function CymaticsVisualizer({
     const render = () => {
       // 1. Update yaw if auto-rotating and not interacting
       if (autoRotate && !isDraggingCamera && !draggedNodeId) {
-        yawRef.current += 0.003;
+        targetYawRef.current += 0.003;
       }
+
+      // Smooth camera lerp
+      const lerpFactor = 0.07;
+      pitchRef.current += (targetPitchRef.current - pitchRef.current) * lerpFactor;
+      
+      let diffYaw = targetYawRef.current - yawRef.current;
+      diffYaw = Math.atan2(Math.sin(diffYaw), Math.cos(diffYaw));
+      yawRef.current += diffYaw * lerpFactor;
 
       const yaw = yawRef.current;
       const pitch = pitchRef.current;
       const localYaw = yaw;
-
-      // Update HUD elements directly in DOM to avoid React re-renders
-      const coordsEl = document.getElementById('hud-coordinates');
-      if (coordsEl) {
-        coordsEl.textContent = `YAW: ${yaw.toFixed(2)} rad | PITCH: ${pitch.toFixed(2)} rad`;
-      }
 
       const { width, height } = dimensions;
       ctx.clearRect(0, 0, width, height);
@@ -261,81 +284,214 @@ export default function CymaticsVisualizer({
       }
       ctx.stroke();
 
+      // 1. Get active element list based on activeField or selection
+      const activeIds = activeField === 'four' 
+        ? ['fire', 'water', 'earth', 'air'] 
+        : (activeField === 'eight' ? ['fire', 'water', 'earth', 'air', 'ice', 'lightning', 'seismic', 'life'] : [selectedElementId]);
+
+      const getClosestActiveElement = (angle: number) => {
+        let closestId = selectedElementId;
+        let maxCos = -1.0;
+        activeIds.forEach((id) => {
+          const nodeObj = nodes.find(n => n.id === id);
+          const nodeAngle = nodeObj ? nodeObj.angle : 0;
+          const cosVal = Math.cos(angle - nodeAngle);
+          if (cosVal > maxCos) {
+            maxCos = cosVal;
+            closestId = id as ElementType;
+          }
+        });
+        return { id: closestId, cosVal: maxCos };
+      };
+
       // Find selected node and angle
       const selectedNodeObj = nodes.find(n => n.id === selectedElementId);
       const phiSelected = selectedNodeObj ? selectedNodeObj.angle : 0;
       const selectedElement = elements.find(e => e.id === selectedElementId);
       const highlightRGB = ELEMENT_RGBS[selectedElementId] || [255, 255, 255];
 
-      // 4. Draw Torus Shape Wireframe with major radius 0 (Horn Torus)
-      // Skewed towards the active selected element. Only selected element is highlighted.
-      // Poloidal lines (wrapping through center)
-      for (let w = 0; w < 16; w++) {
-        const phi = (w * Math.PI * 2) / 16;
-        const cosDiff = Math.cos(phi - phiSelected);
-        
-        // Asymmetric scale factor
-        const s_phi = 1.0 + 0.5 * cosDiff;
-        const scaleFactor = (sphereRadius / 2) * (s_phi / 1.5);
+      const isVoid = visualMode === 'void';
+      const isLight = visualMode === 'light';
+      const isSpecial = visualMode === 'special';
+      const torusScale = isVoid ? 0.28 : (isLight ? 0.72 : 0.5);
 
-        // Highlight line if on the active selected element side
-        let strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        let lineWidth = 0.8;
-        if (cosDiff > 0.3) {
-          const blend = cosDiff; // max is 1.0
-          const r = Math.round(255 + (highlightRGB[0] - 255) * blend);
-          const g = Math.round(255 + (highlightRGB[1] - 255) * blend);
-          const b = Math.round(255 + (highlightRGB[2] - 255) * blend);
-          strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.25 + 0.45 * blend})`;
-          lineWidth = 1.8;
+      // 4. Draw Torus Shape Wireframe
+      if (isSpecial) {
+        // Special Mode: Double spiral vortex to the poles (radius R = 0, collapsing)
+        const spiralArms = 6;
+        ctx.strokeStyle = 'rgba(167, 139, 250, 0.42)'; // Violet color
+        ctx.lineWidth = 1.5;
+
+        for (let s = 0; s < spiralArms; s++) {
+          const phiOffset = (s * Math.PI * 2) / spiralArms;
+
+          // North pole spiral
+          ctx.beginPath();
+          let first = true;
+          for (let t = 0; t <= 1.02; t += 0.02) {
+            const pz = sphereRadius * t;
+            const r_env = sphereRadius * 0.45 * Math.sin(t * Math.PI);
+            const phi = phiOffset + t * Math.PI * 4.0;
+            const px = r_env * Math.cos(phi);
+            const py = r_env * Math.sin(phi);
+
+            const pt = project3D(px, py, pz, width, height, pitch, localYaw);
+            if (first) {
+              ctx.moveTo(pt.x, pt.y);
+              first = false;
+            } else {
+              ctx.lineTo(pt.x, pt.y);
+            }
+          }
+          ctx.stroke();
+
+          // South pole spiral
+          ctx.beginPath();
+          first = true;
+          for (let t = 0; t <= 1.02; t += 0.02) {
+            const pz = -sphereRadius * t;
+            const r_env = sphereRadius * 0.45 * Math.sin(t * Math.PI);
+            const phi = phiOffset - t * Math.PI * 4.0;
+            const px = r_env * Math.cos(phi);
+            const py = r_env * Math.sin(phi);
+
+            const pt = project3D(px, py, pz, width, height, pitch, localYaw);
+            if (first) {
+              ctx.moveTo(pt.x, pt.y);
+              first = false;
+            } else {
+              ctx.lineTo(pt.x, pt.y);
+            }
+          }
+          ctx.stroke();
+        }
+      } else {
+        // Poloidal lines
+        for (let w = 0; w < 16; w++) {
+          const phi = (w * Math.PI * 2) / 16;
+          const { id: closestId, cosVal: cosDiff } = getClosestActiveElement(phi);
+          const currentHighlightRGB = ELEMENT_RGBS[closestId] || [255, 255, 255];
+          
+          // Asymmetric scale factor if normal, symmetric if void/light
+          const s_phi = (isVoid || isLight) ? 1.0 : (1.0 + 0.5 * cosDiff);
+          const scaleFactor = (sphereRadius * torusScale) * (s_phi / (isVoid || isLight ? 1.0 : 1.5));
+
+          let strokeStyle = 'rgba(255, 255, 255, 0.15)';
+          let lineWidth = 0.8;
+          if (isVoid) {
+            strokeStyle = 'rgba(168, 85, 247, 0.48)'; // Violet
+            lineWidth = 1.4;
+          } else if (isLight) {
+            strokeStyle = 'rgba(245, 158, 11, 0.52)'; // Golden Gold
+            lineWidth = 1.7;
+          } else if (activeField) {
+            const blend = cosDiff;
+            const r = Math.round(150 + (currentHighlightRGB[0] - 150) * blend);
+            const g = Math.round(150 + (currentHighlightRGB[1] - 150) * blend);
+            const b = Math.round(150 + (currentHighlightRGB[2] - 150) * blend);
+            strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.3 + 0.55 * blend})`;
+            lineWidth = 1.8;
+          } else if (cosDiff > 0.3) {
+            const blend = cosDiff;
+            const r = Math.round(255 + (highlightRGB[0] - 255) * blend);
+            const g = Math.round(255 + (highlightRGB[1] - 255) * blend);
+            const b = Math.round(255 + (highlightRGB[2] - 255) * blend);
+            strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.25 + 0.45 * blend})`;
+            lineWidth = 1.8;
+          }
+
+          ctx.beginPath();
+          let first = true;
+          for (let theta = -Math.PI; theta <= Math.PI + 0.05; theta += 0.08) {
+            const r_minor = scaleFactor * (1 + Math.cos(theta));
+            const tx = r_minor * Math.cos(phi);
+            const ty = r_minor * Math.sin(phi);
+            const tz = scaleFactor * Math.sin(theta);
+
+            const pt = project3D(tx, ty, tz, width, height, pitch, localYaw);
+            if (first) {
+              ctx.moveTo(pt.x, pt.y);
+              first = false;
+            } else {
+              ctx.lineTo(pt.x, pt.y);
+            }
+          }
+          ctx.strokeStyle = strokeStyle;
+          ctx.lineWidth = lineWidth;
+          ctx.stroke();
         }
 
-        ctx.beginPath();
-        let first = true;
-        for (let theta = -Math.PI; theta <= Math.PI + 0.05; theta += 0.08) {
-          const r_minor = scaleFactor * (1 + Math.cos(theta));
-          const tx = r_minor * Math.cos(phi);
-          const ty = r_minor * Math.sin(phi);
-          const tz = scaleFactor * Math.sin(theta);
+        // Toroidal lines
+        for (let t = 1; t < 7; t++) {
+          const theta = -Math.PI / 2 + (t * Math.PI) / 8;
+          let lastPt: { x: number; y: number } | null = null;
+          
+          for (let phi = 0; phi <= Math.PI * 2 + 0.05; phi += 0.05) {
+            const { id: closestId, cosVal: cosDiff } = getClosestActiveElement(phi);
+            const currentHighlightRGB = ELEMENT_RGBS[closestId] || [255, 255, 255];
+            
+            const s_phi = (isVoid || isLight) ? 1.0 : (1.0 + 0.5 * cosDiff);
+            const scaleFactor = (sphereRadius * torusScale) * (s_phi / (isVoid || isLight ? 1.0 : 1.5));
+            const r_minor = scaleFactor * (1 + Math.cos(theta));
+            const tx = r_minor * Math.cos(phi);
+            const ty = r_minor * Math.sin(phi);
+            const tz = scaleFactor * Math.sin(theta);
 
-          const pt = project3D(tx, ty, tz, width, height, pitch, localYaw);
-          if (first) {
-            ctx.moveTo(pt.x, pt.y);
-            first = false;
-          } else {
-            ctx.lineTo(pt.x, pt.y);
+            const pt = project3D(tx, ty, tz, width, height, pitch, localYaw);
+            
+            let strokeStyle = 'rgba(255, 255, 255, 0.12)';
+            let lineWidth = 1.0;
+            
+            if (isVoid) {
+              strokeStyle = 'rgba(168, 85, 247, 0.22)';
+            } else if (isLight) {
+              strokeStyle = 'rgba(245, 158, 11, 0.24)';
+            } else if (activeField) {
+              const blend = cosDiff;
+              const r = Math.round(150 + (currentHighlightRGB[0] - 150) * blend);
+              const g = Math.round(150 + (currentHighlightRGB[1] - 150) * blend);
+              const b = Math.round(150 + (currentHighlightRGB[2] - 150) * blend);
+              strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.1 + 0.25 * blend})`;
+              lineWidth = 1.2;
+            } else {
+              const singleCos = Math.cos(phi - phiSelected);
+              if (singleCos > 0) {
+                const blend = singleCos;
+                const r = Math.round(255 + (highlightRGB[0] - 255) * blend);
+                const g = Math.round(255 + (highlightRGB[1] - 255) * blend);
+                const b = Math.round(255 + (highlightRGB[2] - 255) * blend);
+                strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.12 + 0.15 * blend})`;
+                lineWidth = 1.2;
+              }
+            }
+
+            if (lastPt) {
+              ctx.beginPath();
+              ctx.moveTo(lastPt.x, lastPt.y);
+              ctx.lineTo(pt.x, pt.y);
+              ctx.strokeStyle = strokeStyle;
+              ctx.lineWidth = lineWidth;
+              ctx.stroke();
+            }
+            
+            lastPt = pt;
           }
         }
-        ctx.strokeStyle = strokeStyle;
-        ctx.lineWidth = lineWidth;
-        ctx.stroke();
       }
 
-      // Toroidal lines (circles running parallel to equator)
-      for (let t = 1; t < 7; t++) {
-        const theta = -Math.PI / 2 + (t * Math.PI) / 8;
-        ctx.beginPath();
-        let first = true;
-        for (let phi = 0; phi <= Math.PI * 2 + 0.05; phi += 0.05) {
-          const cosDiff = Math.cos(phi - phiSelected);
-          const s_phi = 1.0 + 0.5 * cosDiff;
-          const scaleFactor = (sphereRadius / 2) * (s_phi / 1.5);
-          const r_minor = scaleFactor * (1 + Math.cos(theta));
-          const tx = r_minor * Math.cos(phi);
-          const ty = r_minor * Math.sin(phi);
-          const tz = scaleFactor * Math.sin(theta);
-
-          const pt = project3D(tx, ty, tz, width, height, pitch, localYaw);
-          if (first) {
-            ctx.moveTo(pt.x, pt.y);
-            first = false;
-          } else {
-            ctx.lineTo(pt.x, pt.y);
-          }
-        }
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-        ctx.lineWidth = 1.0;
-        ctx.stroke();
+      // Draw connections from central torus to all 8 outer nodes in Void Mode
+      if (isVoid) {
+        nodes.forEach((node) => {
+          const ptNode = project3D(sphereRadius * Math.cos(node.angle), sphereRadius * Math.sin(node.angle), 0, width, height, pitch, localYaw);
+          const ptCenterTorus = project3D(sphereRadius * 0.28 * Math.cos(node.angle), sphereRadius * 0.28 * Math.sin(node.angle), 0, width, height, pitch, localYaw);
+          
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(168, 85, 247, 0.32)';
+          ctx.lineWidth = 1.0;
+          ctx.moveTo(ptCenterTorus.x, ptCenterTorus.y);
+          ctx.lineTo(ptNode.x, ptNode.y);
+          ctx.stroke();
+        });
       }
 
       // 5. Draw 8 Nodes in Equatorial Plane
@@ -345,7 +501,6 @@ export default function CymaticsVisualizer({
         const el = elements.find(e => e.id === node.id);
         if (!el) return;
 
-        // Sequence nodes exactly touching the sphere boundary
         const radiusDist = sphereRadius;
         const nx = radiusDist * Math.cos(node.angle);
         const ny = radiusDist * Math.sin(node.angle);
@@ -353,26 +508,28 @@ export default function CymaticsVisualizer({
 
         const pt = project3D(nx, ny, nz, width, height, pitch, localYaw);
         
-        const isSelected = selectedElementId === node.id;
-        const baseSize = isSelected ? 10 : 6;
+        // Data-driven active node detection
+        const isElementActive = el.amplitude > 0.1 && node.isActive;
+        const baseSize = isElementActive ? 10 : 6;
         const nodeRadius = baseSize * pt.scale;
 
-        // Save projected screen coordinates for click detection
         updatedScreenCoords.set(node.id, { x: pt.x, y: pt.y, radius: nodeRadius });
 
-        // Connection radial line from center to node
-        ctx.beginPath();
-        ctx.strokeStyle = isSelected 
-          ? el.color 
-          : 'rgba(255, 255, 255, 0.06)';
-        ctx.lineWidth = isSelected ? 1.5 : 0.8;
-        const centerPt = project3D(0, 0, 0, width, height, pitch, localYaw);
-        ctx.moveTo(centerPt.x, centerPt.y);
-        ctx.lineTo(pt.x, pt.y);
-        ctx.stroke();
+        // Connection radial line from center to node (skip in void mode since drawn above, unless active)
+        if (!isVoid || isElementActive) {
+          ctx.beginPath();
+          ctx.strokeStyle = isElementActive 
+            ? el.color 
+            : 'rgba(255, 255, 255, 0.06)';
+          ctx.lineWidth = isElementActive ? 1.5 : 0.8;
+          const centerPt = project3D(0, 0, 0, width, height, pitch, localYaw);
+          ctx.moveTo(centerPt.x, centerPt.y);
+          ctx.lineTo(pt.x, pt.y);
+          ctx.stroke();
+        }
 
-        if (isSelected) {
-          // Glow layer for selected element
+        if (isElementActive) {
+          // Glow layer for active elements
           const nodeGlow = ctx.createRadialGradient(pt.x, pt.y, 1, pt.x, pt.y, nodeRadius * 3);
           nodeGlow.addColorStop(0, el.color);
           nodeGlow.addColorStop(0.3, el.glowColor.replace(/[\d.]+\)$/, '0.35)'));
@@ -387,17 +544,16 @@ export default function CymaticsVisualizer({
         // Node Core Solid Circle
         ctx.beginPath();
         ctx.arc(pt.x, pt.y, nodeRadius * 0.7, 0, Math.PI * 2);
-        ctx.fillStyle = isSelected ? el.color : '#556172';
+        ctx.fillStyle = isElementActive ? el.color : '#556172';
         ctx.fill();
-        ctx.strokeStyle = isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.25)';
-        ctx.lineWidth = isSelected ? 2 : 1;
+        ctx.strokeStyle = isElementActive ? '#ffffff' : 'rgba(255, 255, 255, 0.25)';
+        ctx.lineWidth = isElementActive ? 2 : 1;
         ctx.stroke();
       });
 
       nodeScreenCoordsRef.current = updatedScreenCoords;
 
       // 6. Update and Draw Torus Particles
-      // Particle flow curve out to active node and back, with color intensifying
       const particles = particlesRef.current;
       const count = particles.length;
 
@@ -416,69 +572,119 @@ export default function CymaticsVisualizer({
 
         p.age++;
         if (p.age > p.lifeSpan) {
-          // Recycle
           Object.assign(p, generateRandomParticle());
           p.age = 0;
         }
 
-        // Calculate positions on Horn Torus
-        const cosDiff = Math.cos(p.phi - phiSelected);
-        const s_phi = 1.0 + 0.5 * cosDiff;
-        const scaleFactor = (sphereRadius / 2) * (s_phi / 1.5);
+        let px = 0, py = 0, pz = 0;
+        let r = 255, g = 255, b = 255;
+        let alpha = p.alpha;
+        let size = p.size;
 
-        const r_minor = scaleFactor * (1 + Math.cos(p.theta));
-        const px = r_minor * Math.cos(p.phi);
-        const py = r_minor * Math.sin(p.phi);
-        const pz = scaleFactor * Math.sin(p.theta);
+        if (isSpecial) {
+          // Special Mode: spiral vortex from center to poles
+          const t = Math.abs(p.theta) / Math.PI; // 0 to 1
+          const isNorth = p.theta > 0;
+          pz = sphereRadius * t * (isNorth ? 1 : -1);
+          
+          const r_env = sphereRadius * 0.45 * Math.sin(t * Math.PI);
+          const winding = t * Math.PI * 4.0 * (isNorth ? 1 : -1);
+          const phi = p.phi + winding;
+          px = r_env * Math.cos(phi);
+          py = r_env * Math.sin(phi);
+
+          // Violet to white-indigo spiral color
+          const blend = t;
+          r = Math.round(139 + (217 - 139) * blend);
+          g = Math.round(92 + (70 - 92) * blend);
+          b = Math.round(246 + (239 - 246) * blend);
+        } else {
+          // Toroidal coordinates - use active fields closest element
+          const { id: closestId, cosVal: cosDiff } = getClosestActiveElement(p.phi);
+          const currentHighlightRGB = ELEMENT_RGBS[closestId] || [255, 255, 255];
+
+          const s_phi = (isVoid || isLight) ? 1.0 : (1.0 + 0.5 * cosDiff);
+          const scaleFactor = (sphereRadius * torusScale) * (s_phi / (isVoid || isLight ? 1.0 : 1.5));
+
+          const r_minor = scaleFactor * (1 + Math.cos(p.theta));
+          px = r_minor * Math.cos(p.phi);
+          py = r_minor * Math.sin(p.phi);
+          pz = scaleFactor * Math.sin(p.theta);
+
+          const t_norm = 1.0 - Math.abs(p.theta) / Math.PI;
+
+          if (isVoid) {
+            // Intense violet void particles
+            r = Math.round(147 + (168 - 147) * t_norm);
+            g = Math.round(51 + (85 - 51) * t_norm);
+            b = Math.round(234 + (247 - 234) * t_norm);
+            alpha = (0.24 + 0.52 * t_norm);
+            size = p.size * (0.8 + 0.5 * t_norm);
+          } else if (isLight) {
+            // Bright gold light particles
+            r = Math.round(251 + (245 - 251) * t_norm);
+            g = Math.round(191 + (158 - 191) * t_norm);
+            b = Math.round(36 + (11 - 36) * t_norm);
+            alpha = (0.28 + 0.56 * t_norm);
+            size = p.size * (1.1 + 0.9 * t_norm);
+          } else if (activeField) {
+            // Symmetrical multi-element active fields particles
+            const blend = t_norm * cosDiff;
+            r = Math.round(255 + (currentHighlightRGB[0] - 255) * blend);
+            g = Math.round(255 + (currentHighlightRGB[1] - 255) * blend);
+            b = Math.round(255 + (currentHighlightRGB[2] - 255) * blend);
+            alpha = (0.22 + 0.65 * blend);
+            size = p.size * (1.1 + 1.4 * blend);
+          } else if (cosDiff > 0) {
+            const blend = t_norm * cosDiff;
+            r = Math.round(255 + (highlightRGB[0] - 255) * blend);
+            g = Math.round(255 + (highlightRGB[1] - 255) * blend);
+            b = Math.round(255 + (highlightRGB[2] - 255) * blend);
+            alpha = (0.2 + 0.6 * blend);
+            size = p.size * (1.0 + 1.2 * blend);
+          } else {
+            alpha = 0.12;
+            size = p.size * 0.55;
+          }
+        }
 
         // Project
         const pt = project3D(px, py, pz, width, height, pitch, localYaw);
+        let finalSize = size * pt.scale;
+        let finalAlpha = alpha * pt.scale;
 
-        // Compute normalized factor: 0 at center (p.theta = -PI or PI), 1 at outer equator (p.theta = 0)
-        const t_norm = 1.0 - Math.abs(p.theta) / Math.PI;
-
-        let r = 255, g = 255, b = 255;
-        let alpha = p.alpha;
-        let size = p.size * pt.scale;
-
-        if (cosDiff > 0) {
-          // Particles on active element side: color intensifies to element highlight color
-          const blend = t_norm * cosDiff;
-          r = Math.round(255 + (highlightRGB[0] - 255) * blend);
-          g = Math.round(255 + (highlightRGB[1] - 255) * blend);
-          b = Math.round(255 + (highlightRGB[2] - 255) * blend);
-          alpha = (0.2 + 0.6 * blend) * pt.scale;
-          size = p.size * pt.scale * (1.0 + 1.2 * blend);
-        } else {
-          // Particles on opposite side: less intensity, stays white, never touches sphere
-          alpha = 0.12 * pt.scale;
-          size = p.size * pt.scale * 0.55;
-        }
-
-        // Fade out slightly near lifespan limits
-        if (p.age < 15) alpha *= p.age / 15;
-        else if (p.age > p.lifeSpan - 15) alpha *= (p.lifeSpan - p.age) / 15;
+        if (p.age < 15) finalAlpha *= p.age / 15;
+        else if (p.age > p.lifeSpan - 15) finalAlpha *= (p.lifeSpan - p.age) / 15;
 
         // Render point
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${finalAlpha})`;
         ctx.beginPath();
-        ctx.arc(pt.x, pt.y, Math.max(0.4, size), 0, Math.PI * 2);
+        ctx.arc(pt.x, pt.y, Math.max(0.4, finalSize), 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Draw active element glow in center
-      if (selectedElement) {
-        const centerPt = project3D(0, 0, 0, width, height, pitch, localYaw);
-        const centerGlow = ctx.createRadialGradient(centerPt.x, centerPt.y, 2, centerPt.x, centerPt.y, 20);
-        
+      // Draw center core glow
+      const centerPt = project3D(0, 0, 0, width, height, pitch, localYaw);
+      const centerGlow = ctx.createRadialGradient(centerPt.x, centerPt.y, 2, centerPt.x, centerPt.y, isVoid ? 12 : (isLight ? 25 : 20));
+      
+      if (isVoid) {
+        centerGlow.addColorStop(0, '#c084fc');
+        centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
+      } else if (isLight) {
+        centerGlow.addColorStop(0, '#fbbf24');
+        centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
+      } else if (selectedElement) {
         centerGlow.addColorStop(0, selectedElement.color);
         centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
-        
-        ctx.fillStyle = centerGlow;
-        ctx.beginPath();
-        ctx.arc(centerPt.x, centerPt.y, 20, 0, Math.PI * 2);
-        ctx.fill();
+      } else {
+        centerGlow.addColorStop(0, '#ffffff');
+        centerGlow.addColorStop(1, 'rgba(0,0,0,0)');
       }
+      
+      ctx.fillStyle = centerGlow;
+      ctx.beginPath();
+      ctx.arc(centerPt.x, centerPt.y, isVoid ? 12 : (isLight ? 25 : 20), 0, Math.PI * 2);
+      ctx.fill();
 
       ctx.globalCompositeOperation = 'source-over';
       animationFrameRef.current = requestAnimationFrame(render);
@@ -491,7 +697,7 @@ export default function CymaticsVisualizer({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [dimensions, elements, nodes, selectedElementId, autoRotate, isDraggingCamera, draggedNodeId]);
+  }, [dimensions, elements, nodes, selectedElementId, autoRotate, isDraggingCamera, draggedNodeId, visualMode]);
 
   // Handle Mouse/Touch Interaction
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -508,7 +714,7 @@ export default function CymaticsVisualizer({
     let clickedNodeId: ElementType | null = null;
     nodeScreenCoordsRef.current.forEach((coord, id) => {
       const dist = Math.hypot(coord.x - mouseX, coord.y - mouseY);
-      if (dist <= coord.radius + 15) { // generous hit boundary
+      if (dist <= coord.radius + 15) {
         clickedNodeId = id;
       }
     });
@@ -525,6 +731,7 @@ export default function CymaticsVisualizer({
         yaw: yawRef.current,
         pitch: pitchRef.current,
       };
+      onClearViewAnglePreset();
     }
   };
 
@@ -537,45 +744,25 @@ export default function CymaticsVisualizer({
     const mouseY = e.clientY - rect.top;
 
     if (draggedNodeId) {
-      // Dragging node radially/angularly!
-      // Translate 2D mouse pos back to equatorial plane vector relative to center
       const centerX = dimensions.width / 2;
       const centerY = dimensions.height / 2;
-      
-      // Calculate delta from center in screen space
       const dx = mouseX - centerX;
       const dy = mouseY - centerY;
       
-      // Compute raw radial drag using projection adjustments
-      // We want to approximate the distance on the 3D plane
       const rawDistance = Math.hypot(dx, dy);
       const sphereRadius = Math.max(120, Math.min(dimensions.width, dimensions.height) * 0.30);
 
-      // Adjust ratio of distance from center based on projection bounds
-      // Raw distance in pixels relative to center / sphere bound
       let targetRatio = rawDistance / sphereRadius;
       targetRatio = Math.max(0.15, Math.min(1.2, targetRatio));
 
-      // Map ratio to:
-      // - Node distance (amplitude): 0.2 to 1.1
       const newDistance = Math.max(0.2, Math.min(1.0, targetRatio));
       
-      // Compute angular position based on screen angle, modified by camera yaw/pitch
-      // To keep tuning simple and satisfying:
-      // - Radial distance scales AMPLITUDE
-      // - Dragging further/closer updates frequency offsets
       const targetNode = nodes.find(n => n.id === draggedNodeId);
       if (targetNode) {
-        // Amplitude is tied to node distance
-        // Outer edge = 100% amplitude. Center = 20% amplitude.
         const amplitude = (newDistance - 0.2) / 0.8;
-        
-        // Update frequency: we can allow frequency tuning by dragging.
-        // Let's offset the frequency within a reasonable range (e.g. ±150Hz from base)
         const el = elements.find(e => e.id === draggedNodeId);
         if (el) {
-          // Adjust frequency offset: drag distance modifies frequency multiplier slightly
-          const freqOffset = (newDistance - 0.6) * 200; // up to +/- 100Hz
+          const freqOffset = (newDistance - 0.6) * 200;
           const tunedFreq = Math.max(el.baseFrequency * 0.4, Math.min(el.baseFrequency * 2.2, el.baseFrequency + freqOffset));
 
           onNodeChange(draggedNodeId, {
@@ -586,14 +773,17 @@ export default function CymaticsVisualizer({
         }
       }
     } else if (isDraggingCamera) {
-      // Rotate camera
       const dx = mouseX - dragStartRef.current.x;
       const dy = mouseY - dragStartRef.current.y;
 
-      // Sensitivity
       const sensitivity = 0.007;
-      yawRef.current = dragStartRef.current.yaw - dx * sensitivity;
-      pitchRef.current = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, dragStartRef.current.pitch + dy * sensitivity));
+      const nextYaw = dragStartRef.current.yaw - dx * sensitivity;
+      const nextPitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, dragStartRef.current.pitch + dy * sensitivity));
+      
+      yawRef.current = nextYaw;
+      targetYawRef.current = nextYaw;
+      pitchRef.current = nextPitch;
+      targetPitchRef.current = nextPitch;
     }
   };
 
@@ -618,7 +808,7 @@ export default function CymaticsVisualizer({
     let clickedNodeId: ElementType | null = null;
     nodeScreenCoordsRef.current.forEach((coord, id) => {
       const dist = Math.hypot(coord.x - mouseX, coord.y - mouseY);
-      if (dist <= coord.radius + 20) { // slightly larger hit bound for touch
+      if (dist <= coord.radius + 20) {
         clickedNodeId = id;
       }
     });
@@ -634,6 +824,7 @@ export default function CymaticsVisualizer({
         yaw: yawRef.current,
         pitch: pitchRef.current,
       };
+      onClearViewAnglePreset();
     }
   };
 
@@ -678,8 +869,13 @@ export default function CymaticsVisualizer({
       const dx = mouseX - dragStartRef.current.x;
       const dy = mouseY - dragStartRef.current.y;
       const sensitivity = 0.009;
-      yawRef.current = dragStartRef.current.yaw - dx * sensitivity;
-      pitchRef.current = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, dragStartRef.current.pitch + dy * sensitivity));
+      const nextYaw = dragStartRef.current.yaw - dx * sensitivity;
+      const nextPitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, dragStartRef.current.pitch + dy * sensitivity));
+
+      yawRef.current = nextYaw;
+      targetYawRef.current = nextYaw;
+      pitchRef.current = nextPitch;
+      targetPitchRef.current = nextPitch;
     }
   };
 
