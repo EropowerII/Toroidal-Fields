@@ -214,7 +214,7 @@ export default function CymaticsVisualizer({
 
       ctx.globalCompositeOperation = 'screen';
 
-      const sphereRadius = 220; // The bounding sphere radius
+      const sphereRadius = Math.max(120, Math.min(width, height) * 0.30); // The bounding sphere radius
 
       // 2. Draw Bounding Sphere Wireframe (Futuristic and thin)
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
@@ -392,25 +392,6 @@ export default function CymaticsVisualizer({
         ctx.strokeStyle = isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.25)';
         ctx.lineWidth = isSelected ? 2 : 1;
         ctx.stroke();
-
-        // Node label
-        if (isSelected) {
-          ctx.font = 'bold 12px ui-monospace, monospace';
-          ctx.fillStyle = '#ffffff';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(
-            `${el.name.toUpperCase()} (${Math.round(el.frequency)}Hz)`, 
-            pt.x, 
-            pt.y - nodeRadius - 5
-          );
-        } else {
-          ctx.font = '9px ui-monospace, monospace';
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(el.name, pt.x, pt.y - nodeRadius - 4);
-        }
       });
 
       nodeScreenCoordsRef.current = updatedScreenCoords;
@@ -568,11 +549,11 @@ export default function CymaticsVisualizer({
       // Compute raw radial drag using projection adjustments
       // We want to approximate the distance on the 3D plane
       const rawDistance = Math.hypot(dx, dy);
-      const sphereRadius = 220;
+      const sphereRadius = Math.max(120, Math.min(dimensions.width, dimensions.height) * 0.30);
 
       // Adjust ratio of distance from center based on projection bounds
-      // Raw distance in pixels relative to center / ~220px sphere bound
-      let targetRatio = rawDistance / 220;
+      // Raw distance in pixels relative to center / sphere bound
+      let targetRatio = rawDistance / sphereRadius;
       targetRatio = Math.max(0.15, Math.min(1.2, targetRatio));
 
       // Map ratio to:
@@ -672,8 +653,9 @@ export default function CymaticsVisualizer({
       const dx = mouseX - centerX;
       const dy = mouseY - centerY;
       const rawDistance = Math.hypot(dx, dy);
+      const sphereRadius = Math.max(120, Math.min(dimensions.width, dimensions.height) * 0.30);
 
-      let targetRatio = rawDistance / 220;
+      let targetRatio = rawDistance / sphereRadius;
       targetRatio = Math.max(0.15, Math.min(1.2, targetRatio));
       const newDistance = Math.max(0.2, Math.min(1.0, targetRatio));
       const targetNode = nodes.find(n => n.id === draggedNodeId);
@@ -706,25 +688,6 @@ export default function CymaticsVisualizer({
       ref={containerRef} 
       className="relative w-full h-full flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing select-none"
     >
-      {/* Visual background ambient details */}
-      <div className="absolute top-4 left-4 font-mono text-[10px] text-slate-500 pointer-events-none select-none flex flex-col gap-1">
-        <div>COSMIC COORDINATES ACTIVE</div>
-        <div id="hud-coordinates">YAW: {yawRef.current.toFixed(2)} rad | PITCH: {pitchRef.current.toFixed(2)} rad</div>
-        <div>STANDING WAVE HARMONICS ACTIVE</div>
-      </div>
-
-      <div className="absolute top-4 right-4 pointer-events-none text-right font-mono text-[10px] text-slate-500">
-        <div>HORN TORUS: R=0</div>
-        <div>PARTICLES: {particlesRef.current.length}</div>
-        <div>FPS: 60 (LOCKED)</div>
-      </div>
-
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center pointer-events-none select-none">
-        <p className="text-[11px] font-mono text-slate-400 bg-slate-950/80 backdrop-blur px-3 py-1.5 rounded-full border border-slate-800/40 shadow-xl">
-          🖱️ Drag background to Rotate Camera | 🔮 Drag colored nodes to Tune Resonance
-        </p>
-      </div>
-
       <canvas
         id="cymatic-3d-canvas"
         ref={canvasRef}

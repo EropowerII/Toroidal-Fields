@@ -282,77 +282,32 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#030509] text-slate-100 flex items-center justify-center p-3 sm:p-6 lg:p-8 font-sans overflow-x-hidden">
-      <div className="w-full max-w-7xl flex flex-col gap-4 sm:gap-6">
+    <div className="flex flex-col md:flex-row w-screen h-screen min-h-screen bg-[#030509] text-slate-100 font-sans overflow-hidden select-none">
+      
+      {/* 1. Left Sidebar panel: Header + Selector + HUD controls */}
+      <aside className="w-full md:w-80 shrink-0 border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950/40 backdrop-blur-md p-4 sm:p-5 md:p-6 flex flex-col justify-between gap-4 md:gap-5 overflow-y-auto z-10 shadow-2xl">
         
-        {/* Sleek Header Controls */}
-        <header className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-slate-800/60 pb-4">
+        {/* Top block: title and buttons */}
+        <div className="flex flex-col gap-4">
+          
+          {/* Header Title section */}
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-slate-900 border border-slate-800 text-indigo-400 rounded-xl shadow-lg shadow-indigo-500/5">
-              <Sparkles size={20} className="animate-pulse" />
+            <div className="p-2 bg-slate-900 border border-slate-800 text-indigo-400 rounded-xl shadow-lg shadow-indigo-500/5">
+              <Sparkles size={18} className="animate-pulse" />
             </div>
             <div>
-              <h1 className="text-sm font-mono font-bold tracking-widest text-slate-200 uppercase">
-                Cymatic 3D Visualizer
+              <h1 className="text-xs md:text-sm font-mono font-bold tracking-widest text-slate-200 uppercase leading-none">
+                Cymatic 3D Simulator
               </h1>
-              <p className="text-xs text-slate-400 font-medium">
+              <p className="text-[10px] md:text-xs text-slate-400 font-medium mt-1">
                 Harmonic Horn Torus Field Matrix
               </p>
             </div>
           </div>
 
-          {/* Quick HUD controls */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <button
-              onClick={() => setAudioEnabled(!audioEnabled)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border font-mono text-[11px] font-bold transition-all duration-200 shadow-md ${
-                audioEnabled 
-                  ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/40' 
-                  : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800/80'
-              }`}
-            >
-              {audioEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
-              {audioEnabled ? 'SOUND: ON' : 'SOUND: MUTED'}
-            </button>
-
-            <button
-              onClick={() => setAutoRotate(!autoRotate)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border font-mono text-[11px] font-bold transition-all duration-200 shadow-md ${
-                autoRotate 
-                  ? 'bg-indigo-950/40 border-indigo-500/50 text-indigo-300 hover:bg-indigo-900/40' 
-                  : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800/80'
-              }`}
-            >
-              <RotateCw size={13} className={autoRotate ? 'animate-spin' : ''} style={{ animationDuration: '6s' }} />
-              {autoRotate ? 'AUTO-SPIN: ON' : 'SPIN: OFF'}
-            </button>
-
-            <button
-              onClick={handleResetResonance}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 font-mono text-[11px] font-bold transition-all duration-200 shadow-md"
-              title="Reset state to default Fire"
-            >
-              <RefreshCw size={13} />
-              RESET
-            </button>
-          </div>
-        </header>
-
-        {/* Core Layout Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch w-full">
-          
-          {/* Left Panel: Resonance Selector (Selection Buttons) */}
-          <div className="col-span-1 lg:col-span-3 flex flex-col gap-4 bg-slate-950/30 border border-slate-900 rounded-2xl p-4 sm:p-5 shadow-xl">
-            <div className="flex flex-col gap-1 border-b border-slate-900 pb-3">
-              <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase tracking-widest">
-                RESONANCE MATRIX
-              </span>
-              <span className="text-[9px] font-mono text-slate-500 uppercase">
-                Select Resonance Node
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-1 gap-2.5">
+          {/* Combined Resonance Elements and Controls tray */}
+          <div className="flex flex-col gap-2 mt-2">
+            <div className="grid grid-cols-4 md:grid-cols-1 gap-1.5 md:gap-2">
               {elements.map((el) => {
                 const cfg = ELEMENT_BUTTON_CONFIG[el.id];
                 const IconComp = cfg?.icon || Sparkles;
@@ -362,73 +317,107 @@ export default function App() {
                   <button
                     key={el.id}
                     onClick={() => handleSelectElementAndActivate(el.id)}
-                    className={`relative flex items-center justify-start gap-3 px-3.5 py-3 sm:py-3.5 rounded-xl border font-mono text-xs font-bold capitalize transition-all duration-300 w-full text-left cursor-pointer ${
+                    className={`relative flex items-center justify-center md:justify-start gap-2 px-2 md:px-3 py-1.5 md:py-2.5 rounded-xl border font-mono text-[10px] md:text-[11px] font-bold capitalize transition-all duration-300 w-full text-center md:text-left cursor-pointer ${
                       isSelected
-                        ? `bg-gradient-to-r ${cfg.color} ${cfg.borderGlow} scale-[1.02] lg:scale-[1.03] z-10 shadow-lg shadow-indigo-950/40`
+                        ? `bg-gradient-to-br ${cfg.color} ${cfg.borderGlow} scale-[1.02] md:scale-[1.03] z-10 shadow-lg shadow-indigo-950/40`
                         : 'bg-slate-900/40 border-slate-900 text-slate-400 hover:text-slate-200 hover:border-slate-800 hover:bg-slate-900/80'
                     }`}
                   >
-                    <IconComp size={15} className={`${isSelected ? 'animate-bounce text-white' : 'opacity-70 text-slate-400'}`} />
-                    <div className="flex flex-col leading-tight">
-                      <span className="text-[11px] font-semibold tracking-wide">{cfg?.label || el.name}</span>
-                      <span className={`text-[9px] font-mono font-normal mt-0.5 ${isSelected ? 'text-white/85' : 'text-slate-500'}`}>
+                    <IconComp size={13} className={`${isSelected ? 'animate-bounce text-white' : 'opacity-70 text-slate-400'}`} />
+                    <div className="flex flex-col leading-tight items-center md:items-start">
+                      <span className="text-[10px] md:text-[11px] font-semibold tracking-wide">{cfg?.label || el.name}</span>
+                      <span className={`hidden md:inline text-[8px] font-mono font-normal mt-0.5 ${isSelected ? 'text-white/85' : 'text-slate-500'}`}>
                         {Math.round(el.frequency)} Hz
                       </span>
                     </div>
                   </button>
                 );
               })}
-            </div>
-          </div>
 
-          {/* Right Area: Hologram Sphere (Frameless/Spacious) */}
-          <div className="col-span-1 lg:col-span-9 flex items-center justify-center relative w-full min-h-[500px] sm:min-h-[580px]">
-            <CymaticsVisualizer
-              elements={elements}
-              nodes={nodes}
-              onNodeChange={handleNodeChange}
-              selectedElementId={selectedElementId}
-              onSelectElement={handleSelectElementAndActivate}
-              autoRotate={autoRotate}
-            />
+              {/* Sound Control Button */}
+              <button
+                onClick={() => setAudioEnabled(!audioEnabled)}
+                className={`relative flex items-center justify-center md:justify-start gap-2 px-2 md:px-3 py-1.5 md:py-2.5 rounded-xl border font-mono text-[10px] md:text-[11px] font-bold capitalize transition-all duration-300 w-full text-center md:text-left cursor-pointer ${
+                  audioEnabled
+                    ? 'bg-gradient-to-br from-emerald-600/30 to-emerald-950/40 border-emerald-500/50 text-emerald-300 shadow-lg shadow-emerald-950/40'
+                    : 'bg-slate-900/40 border-slate-900 text-slate-400 hover:text-slate-200 hover:border-slate-800 hover:bg-slate-900/80'
+                }`}
+              >
+                {audioEnabled ? <Volume2 size={13} className="text-emerald-400" /> : <VolumeX size={13} className="opacity-70 text-slate-400" />}
+                <div className="flex flex-col leading-tight items-center md:items-start">
+                  <span className="text-[10px] md:text-[11px] font-semibold tracking-wide">Sound</span>
+                  <span className="hidden md:inline text-[8px] font-mono font-normal mt-0.5 opacity-80">
+                    {audioEnabled ? 'Active' : 'Muted'}
+                  </span>
+                </div>
+              </button>
+
+              {/* Auto Spin Control Button */}
+              <button
+                onClick={() => setAutoRotate(!autoRotate)}
+                className={`relative flex items-center justify-center md:justify-start gap-2 px-2 md:px-3 py-1.5 md:py-2.5 rounded-xl border font-mono text-[10px] md:text-[11px] font-bold capitalize transition-all duration-300 w-full text-center md:text-left cursor-pointer ${
+                  autoRotate
+                    ? 'bg-gradient-to-br from-indigo-600/30 to-indigo-950/40 border-indigo-500/50 text-indigo-300 shadow-lg shadow-indigo-950/40'
+                    : 'bg-slate-900/40 border-slate-900 text-slate-400 hover:text-slate-200 hover:border-slate-800 hover:bg-slate-900/80'
+                }`}
+              >
+                <RotateCw size={13} className={`${autoRotate ? 'animate-spin text-indigo-400' : 'opacity-70 text-slate-400'}`} style={{ animationDuration: '6s' }} />
+                <div className="flex flex-col leading-tight items-center md:items-start">
+                  <span className="text-[10px] md:text-[11px] font-semibold tracking-wide">Auto-Spin</span>
+                  <span className="hidden md:inline text-[8px] font-mono font-normal mt-0.5 opacity-80">
+                    {autoRotate ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+              </button>
+
+              {/* Reset Matrix Button */}
+              <button
+                onClick={handleResetResonance}
+                className="relative flex items-center justify-center md:justify-start gap-2 px-2 md:px-3 py-1.5 md:py-2.5 rounded-xl border font-mono text-[10px] md:text-[11px] font-bold capitalize transition-all duration-300 w-full text-center md:text-left cursor-pointer bg-slate-900/40 border-slate-900 text-slate-400 hover:text-slate-200 hover:border-slate-800 hover:bg-slate-900/80"
+              >
+                <RefreshCw size={12} className="opacity-70 text-slate-400" />
+                <div className="flex flex-col leading-tight items-center md:items-start">
+                  <span className="text-[10px] md:text-[11px] font-semibold tracking-wide">Reset</span>
+                  <span className="hidden md:inline text-[8px] font-mono font-normal mt-0.5 opacity-80">
+                    Re-Align
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {/* Volume Control Slider */}
+            {audioEnabled && (
+              <div className="flex items-center justify-between gap-3 bg-slate-950/60 border border-slate-900 px-3 py-2 rounded-xl shadow-md mt-2">
+                <span className="text-[9px] font-mono text-slate-400 font-bold uppercase tracking-wider">Volume:</span>
+                <input
+                  type="range"
+                  min="0.1"
+                  max="0.8"
+                  step="0.05"
+                  value={audioVolume}
+                  onChange={(e) => setAudioVolume(parseFloat(e.target.value))}
+                  className="w-24 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                />
+              </div>
+            )}
           </div>
 
         </div>
 
-        {/* Technical Footer */}
-        <footer className="border-t border-slate-900 pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 bg-slate-900/40 border border-slate-800/40 text-slate-500 rounded-lg">
-              <Info size={13} />
-            </div>
-            <div className="flex flex-col text-left">
-              <span className="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">
-                Symmetrical Standing Wave Field Theory
-              </span>
-              <span className="text-[9px] text-slate-500 max-w-xl mt-0.5 leading-normal">
-                Four major nodes (Fire, Air, Water, Earth) form direct orthogonal harmonic pairings. The minor nodes represent interactions generating skewed asymmetric field lines.
-              </span>
-            </div>
-          </div>
+      </aside>
 
-          {/* Quick interactive audio helper */}
-          {audioEnabled && (
-            <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-850 px-3 py-1.5 rounded-xl">
-              <span className="text-[9px] font-mono text-slate-400">VOL:</span>
-              <input
-                type="range"
-                min="0.1"
-                max="0.8"
-                step="0.05"
-                value={audioVolume}
-                onChange={(e) => setAudioVolume(parseFloat(e.target.value))}
-                className="w-16 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-              />
-            </div>
-          )}
-        </footer>
+      {/* 2. Main content: Completely full screen right-side panel with visualizer */}
+      <main className="flex-1 h-full min-h-[300px] relative overflow-hidden bg-[#030509]">
+        <CymaticsVisualizer
+          elements={elements}
+          nodes={nodes}
+          onNodeChange={handleNodeChange}
+          selectedElementId={selectedElementId}
+          onSelectElement={handleSelectElementAndActivate}
+          autoRotate={autoRotate}
+        />
+      </main>
 
-      </div>
     </div>
   );
 }

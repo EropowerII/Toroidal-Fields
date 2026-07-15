@@ -1,6 +1,6 @@
 {
-  "name": "Cymatic 3D Visualizer",
-  "description": "An interactive 3D cymatic frequency visualizer demonstrating harmonic resonance across major and minor elemental nodes on a Horn Torus.",
+  "name": "Elemental Toroidal Field",
+  "description": "Visual representation of magic.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
